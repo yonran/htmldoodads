@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<title>Ruler Now!</title>
+<meta name=description content="Ruler with centimeters and inches. Configurable for different screens.">
+<style>
+html, body {margin:0}
+#canvas {
+  position:fixed;
+  top:0;right:0;bottom:0;left:0;
+  width:100%;height:100%
+}
+#non-ruler {margin: 1em; position:fixed; width: 100%; bottom: 0; left: 0}
+/* copied from stackoverflow: */
+kbd{
+  padding:2px 4px;
+  white-space:nowrap;
+  color:#000;
+  background:#eee;
+  border-width:1px 3px 3px 1px;
+  border-style:solid;
+  border-color:#ccc #aaa #888 #bbb;
+}
+</style>
+<body><!--Firefox requires the body tag or else document.getElementById will fail-->
+<canvas id=canvas width="600" height="400"></canvas>
+<!--
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.5.0/jquery.js"></script>
+-->
+<script>
+/**
+ * Let's get our coordinate spaces correct.
+ *
+ * Most things are in CSS pixels. any element's style.width, clientWidth,
+ * offsetWidth, etc. are in CSS pixels. Some important dimensions in CSS pixels:
+ * * "layout viewport": document.documentElement.clientWidth and -Height.
+ *   This is the value that style.width: 100% means (on an element in viewport
+ *   element's block formatting context, to use the CSS lingo). On an iPhone,
+ *   this is the width of the document when fully zoomed out.
+ *   On mobile it doesn't change when zoomed; layout is not recalculated.
+ *   On desktop it changes to match the size of the visual vieport (except that
+ *   it doesn't include the scrollbar).
+ * * "visual viewport": window.innerWidth and -Height. It becomes small when
+ *   the user zooms in on an iPhone because only a few CSS pixels can fit in
+ *   the window.
+ *
+ * Within the canvas, there's a new coordinate space with
+ * canvas.width by canvas.height pixels (which are the same as
+ * canvas.getAttribute('width') and and likewise for height). These are
+ * also the intrinsic CSS width/height, if you don't specify them explicitly
+ * (similar to how an image has an intrinsic height--except that a canvas's
+ * intrinsic width changes whenever you set the canvas.width). Typically
+ * the canvas is stored as a bitmap that stores canvas pixels, but HTML5 says
+ * that the browser is free to use a higher-resolution bitmap to store the
+ * canvas pixels. Not sure how that would work though.
+ *
+ * Of course, when you issue draw commands, they go through the 2d context's
+ * transformation matrix before being plotted on the canvas, but I'm assuming
+ * you know how to use the canvas.
+ *
+ * Next, there's the screen pixels, which refer to the reported resolution of
+ * the screen. Normally, this is the same as the physical pixels, but on
+ * high-res mobile browsers the screen resolution is less than the device
+ * resolution. Here are the things that are measured in screen pixels:
+ * 1) screen.width and height: the screen resolution (e.g. 1024x768).
+ *    (also screen.availWidth and -Height, which doesn't include the start menu
+ *    etc.)
+ * 2) window.screenX and -Y (screenLeft and -Right on IE):
+ *    the position of the outer border of the browser
+ *    widnow from the top left of the screen.
+ * 3) window.outerWidth and -Height: the size of the browser window within
+ *    the screen.
+ * 4) event.screenX and -Y: the position of the mouse relative to the top
+ *    left of the screen.
+ * These are in CSSOM-View, although that spec doesn't even mention device
+ * pixels. The spec has caught up to IE 6 but is unaware of modern browsers'
+ * zoom (before, browsers would zoom text only without having device pixels
+ * separate from screen pixels).
+ *
+ * Finally, there are the "device pixels," which are the physical pixels that
+ * the browser draws to. Most of the time this is the same thing as screen
+ * pixels, but iPhone 4 and Nexus One report a low screen-resolution (320px)
+ * but actually have a high device resolution. (Actually, Nexus One reports 
+ * screen pixels = device pixels (~800px) unless you set 
+ * <meta name=viewport content="width=device-width">
+ * and then it reports screen width = 320px)
+ * The ratio between screen pixels and device pixels is window.devicePixelRatio
+ * (webkit only so far).
+ * [1]: http://www.quirksmode.org/blog/archives/2010/09/combining_meta.html
+ *
+ * So how do they relate to one another?
+ * * canvas pixels / CSS pixels = canvas.width / canvas.clientWidth (or
+ *   offsetWidth if there's no border and padding)
+ * * CSS pixels / screen pixels: I think the only way to do this is to measure
+ *   mousemoves on the document and calculate change in clientX / change
+ *   in screenX. If the mouse isn't moving, not sure what we can do.
+ * * screen pixels / device pixels: 1, window.devicePixelRatio is defined.
+ *
+ * See this guide to different kinds of pixels:
+ * http://www.quirksmode.org/mobile/viewports.html
+ * See this reference for the nitty gritty.
+ * http://www.quirksmode.org/m/widths.html
+ * more:
+ * http://menacingcloud.com/?c=highPixelDensityDisplays
+ */
+
+/** This function returns 96.
+ *
+ * I thought this would do the trick (and looking at other Web rulers, other
+ * people thought so too), but unfortunately it doesn't work on modern browsers.
+ *
+ * Originally, CSS defined "absolute" units like cm and in as the physical size
+ * on the screen, which you can configure by changing the dpi in the
+ * operating system's display preferences. However, since nobody used this
+ * responsibly (instead assuming the Windows default of 96dpi), CSS 2.1 has
+ * taken away this tool, and now one 1in = 96px by law. In other words, CSS
+ * can no longer provide any clues to the actual DPI. In Ian Hickson's defense,
+ * this is probably the *only* time I've ever wanted to get the px/in ratio.
+ *
+ * See this post for explanation.
+ * http://www.webkit.org/blog/57/css-units/
+ *
+ * Note: it seems that IE has added a screen.deviceXDPI property but
+ * it also has nothing to do with physical DPI (it just assumes 96dpi).
+ * So it's just more silliness. See
+ * http://msdn.microsoft.com/en-us/library/cc849094(v=vs.85).aspx
+ */
+var cssDpi = function() {
+  var d = document.createElement('div');
+  d.style.width = '10in';
+  d.style.height = '10px';
+  document.body.appendChild(d);
+  var dpi = d.offsetWidth / 10;
+  document.body.removeChild(d);
+  return dpi;
+};
+
+var clampDpi = function(dpi) {
+  if (dpi < 5) dpi = 5;
+  if (dpi > 1000) dpi = 1000;
+  return dpi;
+};
+var canvas = document.getElementById('canvas');
+var c = canvas.getContext('2d');
+var clearRuler = function() {
+  var rulerLength = Math.sqrt(canvas.width*canvas.width + canvas.height*canvas.height);
+  if (options.flipped) {
+    c.clearRect(10, -65, -rulerLength - 20, 130);
+  } else {
+    c.clearRect(-2, -65, rulerLength + 20, 130);
+  }
+  if (!totemMarker || !totemMarker.h) return;
+  var edgeX = totemMarker.w * options.dpi + 8;
+  if (options.flipped) {
+    c.clearRect(4, -4, -edgeX, totemMarker.h * options.dpi + 8);
+  } else {
+    c.clearRect(-4, -4, edgeX, totemMarker.h * options.dpi + 8);
+  }
+};
+/** @type {{w: number, h: (number|undefined)}} */
+var totemMarker = null;
+var drawRuler = function() {
+  var dpi = options.dpi;
+  c.beginPath();
+  c.moveTo(0, 0);
+  var rulerLength = Math.sqrt(canvas.width*canvas.width + canvas.height*canvas.height);
+  if (options.flipped) c.lineTo(-rulerLength, 0);
+  else c.lineTo(rulerLength, 0);
+  if (options.drawInches) {
+    var i = 0, x = 0;
+    c.textBaseline = options.drawInches === 1 ? 'bottom' : 'top';
+    var numTicks = rulerLength / dpi * 16;
+    for (var i = 0; i < numTicks; ++i) {
+      // 1 tick = 1/16 in = dpi/16 px.
+      x = i * dpi/16;
+      if (options.flipped) x = -x;
+      c.moveTo(x,0);
+      var y = i % 16 == 0 ? 50 : i % 8 === 0 ? 30 : i % 4 === 0 ? 20 : i % 2 === 0 ? 15 : 10;
+      if (options.drawInches !== 1) y = -y;
+      c.lineTo(x,y);
+      if (i % 16 == 0) {
+        c.fillText(i/16, x + 3, y);
+      }
+    }
+  }
+  if (options.drawMetric) {
+    var i = 0, x = 0;
+    c.textBaseline = options.drawMetric === 1 ? 'bottom' : 'top';
+    var numTicks = rulerLength / dpi * 25.4;
+    for (var i = 0; i < numTicks; ++i) {
+      // 1 tick = 1 mm = 1/25.4 in = dpi/25.4px
+      x = i * dpi/25.4;
+      if (options.flipped) x = -x;
+      c.moveTo(x,0);
+      var y = i % 10 === 0 ? 30 : i % 5 === 0 ? 20 : 10;
+      if (options.drawMetric !== 1) y = -y;
+      c.lineTo(x,y);
+      if (i % 10 == 0) {
+        c.fillText(i/10, x + 3, y);
+      }
+    }
+  }
+  c.stroke();
+  if (totemMarker) {
+    c.beginPath();
+    c.strokeStyle = 'green';
+    var marker = totemMarker;
+    var edgeX = marker.w * dpi;
+    if (options.flipped) edgeX = -edgeX;
+    c.moveTo(edgeX, -60);
+    c.lineTo(edgeX, 60);
+    if (marker.h) {
+      c.moveTo(0, 0);
+      c.lineTo(edgeX, 0);
+      c.lineTo(edgeX, marker.h*dpi);
+      c.lineTo(0, marker.h*dpi);
+      c.lineTo(0, 0);
+    }
+    c.stroke();
+    c.strokeStyle = 'black';
+  }
+};
+var dpiCalibrated = false;
+var currentTransform = {x: 20, y: 50, angle: 0};
+var options = {dpi: 96, drawMetric: 2, drawInches: 1, flipped: false};
+var screenInfo = {
+    screenWidthPx: screen.width, screenHeightPx: screen.height};
+window.onresize = function() {
+  // TODO: set resolution-dependent width
+  canvas.width = canvas.offsetWidth; //document.documentElement.clientWidth;
+  canvas.height = canvas.offsetHeight; // document.documentElement.clientHeight;
+  c.translate(currentTransform.x, currentTransform.y);
+  c.rotate(currentTransform.angle);
+  drawRuler();
+};
+// TODO: save this before so we don't have to do it on unload
+onunload = function() {
+  // store cookie for 30 days
+  var c = 'ruleroptions='
+  if (dpiCalibrated) c += 'dpi=' + options.dpi + '&';
+  c += 'm=' + options.drawMetric + '&i=' + options.drawInches + '; Max-Age=2592000;';
+  document.cookie = c;
+};
+var parseCookie = function() {
+  var cookies = document.cookie.split(';');
+  for (var i = 0; i < cookies.length; ++i) {
+    var idx = cookies[i].indexOf('=');
+    var name = cookies[i].substr(0, idx).replace(/^\s+|\s+$/g, '');
+    if (name != 'ruleroptions') continue;
+    var value = cookies[i].substr(idx+1).replace(/^\s+|\s+$/g, '');
+    var cookieParts = value.split('&');
+    for (var j = 0; j < cookieParts.length; ++j) {
+      var eq = cookieParts[j].indexOf('=');
+      var k = cookieParts[j].substr(0, eq);
+      var v = cookieParts[j].substr(eq+1);
+      if (k == 'dpi') {
+        options.dpi = clampDpi(parseFloat(v) || 96);
+        dpiCalibrated = true;
+      } else if (k == 'm') {
+        options.drawMetric = '1' == v ? 1 : v == '0' ? 0 : 2;
+      } else if (k == 'i') {
+        options.drawInches = '1' == v ? 1 : v == '0' ? 0 : 2;
+      }
+    }
+  }
+  if (options.drawInches == 1 && options.drawMetric == 1) {
+    options.drawMetric = 2;
+  } else if (options.drawInches == 2 && options.drawMetric == 2) {
+    options.drawMetric = 1;
+  }
+};
+parseCookie();
+var MouseDownModes = {
+  MOVING: 0,
+  CALIBRATING: 1,
+  ROTATING: 2
+};
+canvas.addEventListener('mousedown', function(e) {
+  // clientX is position relative to viewport in CSS pixels.
+  var dragStartX = e.clientX, dragStartY = e.clientY;
+  var lastClientX = dragStartX, lastClientY = dragStartY;
+  var lastMouseAngle = Math.atan2(e.clientY - currentTransform.y,
+                                  e.clientX - currentTransform.x);
+  var mode = MouseDownModes.MOVING;
+  var resizeToTotem = function(e) {
+    // project the click point onto the ruler vector, which is
+    var a = e.clientX - currentTransform.x;
+    var b = e.clientY - currentTransform.y;
+    var r = Math.sqrt(a*a + b*b);
+    var theta = Math.atan2(b, a);
+    var projection = r * Math.cos(theta - currentTransform.angle);
+    var newDpi = projection / totemMarker.w;
+    newDpi = clampDpi(newDpi);
+    options.dpi = newDpi;
+  };
+  if (totemMarker) {
+    mode = MouseDownModes.CALIBRATING;
+  }
+  if (e.shiftKey) mode = MouseDownModes.MOVING;  // even while calibrating, you can move
+  else if (e.ctrlKey) mode = MouseDownModes.ROTATING;
+  if (mode === MouseDownModes.CALIBRATING) {
+    clearRuler();
+    resizeToTotem(e);
+    drawRuler();
+  }
+  var onmousemove = function(e) {
+    e.preventDefault();  // prevent text selection
+    e.stopPropagation();
+    // canvas.width = canvas.width;  // clear the canvas and also the transform
+    clearRuler();
+    if (mode === MouseDownModes.MOVING) {
+      var dx = e.clientX - lastClientX;
+      var dy = e.clientY - lastClientY;
+      c.rotate(-currentTransform.angle)
+      c.translate(dx, dy);
+      c.rotate(currentTransform.angle)
+      currentTransform.x += dx;
+      currentTransform.y += dy;
+    } else if (mode === MouseDownModes.CALIBRATING) {
+      resizeToTotem(e);
+    } else if (mode === MouseDownModes.ROTATING) {
+      var currentMouseAngle = Math.atan2(e.clientY - currentTransform.y,
+                                         e.clientX - currentTransform.x);
+      var angleChange = currentMouseAngle - lastMouseAngle;
+      currentTransform.angle += angleChange;
+      c.rotate(angleChange);
+      lastMouseAngle = currentMouseAngle;
+    }
+    drawRuler();
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+  };
+  var onmouseup = function(e) {
+    document.removeEventListener('mousemove', onmousemove, true);
+    document.removeEventListener('mouseup', onmouseup, false);
+    window.onblur = null;
+  };
+  document.addEventListener('mousemove', onmousemove, true);
+  document.addEventListener('mouseup', onmouseup, false);
+  window.onblur = onmouseup;
+}, false);
+var setTotem = function(o) {
+  clearRuler();
+  totemMarker = o;
+  drawRuler();
+};
+window.onresize();
+
+</script>
+<div id=non-ruler>
+A ruler on the screen with centimeters and inches.
+Tips: Drag to move the ruler; <kbd>Ctrl</kbd>-drag to rotate.<br>
+Options:
+  <label><input id=drawMetricCheckbox type=checkbox checked onchange="options.drawMetric = this.checked ? (options.drawInches == 1 ? 2 : 1) : 0; clearRuler(); drawRuler()">centimeters.</label>
+  <label><input id=drawInchesCheckbox type=checkbox checked onchange="options.drawInches = this.checked ? (options.drawMetric == 1 ? 2 : 1) : 0; clearRuler(); drawRuler()">inches.</label>
+  <label><input type=checkbox onchange="clearRuler(); options.flipped = this.checked; drawRuler();">flipped.</label>
+  <script>
+    document.getElementById('drawMetricCheckbox').checked = options.drawMetric != 0;
+    document.getElementById('drawInchesCheckbox').checked = options.drawInches != 0;
+  </script>
+<a href="#" id=pleaseCalibrateLink
+onclick="this.style.fontSize='1em'; var a = this; (function(s) {if (s.display=='none') {s.display='block'; a.innerHTML = 'Click when you&amp;#x2019;re done calibrating.';} else {s.display='none'; dpiCalibrated = true; a.innerHTML = 'Calibrate.';}})(document.getElementById('calibration').style); setTotem(null); return false;"
+style="font-size: 3em;">Please calibrate your ruler.</a>
+<div id=calibration style="display:none">
+<script>
+if (dpiCalibrated) {
+  var a = document.getElementById('pleaseCalibrateLink');
+  a.onclick();
+  a.onclick();
+}
+</script>
+Choose your totem. Once you&#x2019;ve chosen your totem, then hold it up to the
+screen and click where the edge is.
+<ul>
+  <li><a href="#" onclick="setTotem({w:6.14,h:2.61,name:'dollar bill'});return false;">The reserve currency.</a>
+  <li><a href="#" onclick="setTotem({w:3.370,h:2.125,name:'credit card'});return false;">We take plastic too.</a>
+  <li>Sheet of paper:
+    <a href="#" onclick="setTotem({w:8.5,h:11,name:'letter paper'});return false;">Letter</a>, 
+    <a href="#" onclick="setTotem({w:21.0/2.54,h:29.7/2.54,name:'a4 paper'});return false;">A4</a>
+  <li>Some other object you know the length of:
+      <input size=4 min=0 step=0.1 type=number id=customTotemLength>
+      <select id=customTotemUnits>
+        <option value=cm selected>cm</option><option value=in>in</option>
+      </select>
+      <script>
+        var customTotemLength = document.getElementById('customTotemLength');
+        var customTotemUnits = document.getElementById('customTotemUnits');
+        var onCustomTotemChange = function() {
+          customTotemLength.step = customTotemUnits.value == 'cm' ? 0.1 : 0.0625;
+          if (!customTotemLength.value) return null;
+          var x = parseFloat(customTotemLength.value);
+          if (!x || x <= 0) return;
+          var unit = customTotemUnits.value == 'cm' ? 1/2.54 : 1;
+          setTotem({w: x*unit, name: 'custom totem'});
+        };
+        customTotemLength.addEventListener('input', onCustomTotemChange, false);
+        customTotemUnits.addEventListener('input', onCustomTotemChange, false);
+        customTotemLength.addEventListener('change', onCustomTotemChange, false);
+        customTotemUnits.addEventListener('change', onCustomTotemChange, false);
+      </script>
+</ul>
+</div>
+</div>
+</body>

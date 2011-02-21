@@ -1,0 +1,22 @@
+application: htmldoodads
+version: 1
+runtime: python
+api_version: 1
+
+handlers:
+- url: /
+  script: redirector.py
+- url: /
+  static_dir: static
+
+skip_files:
+# keep the default skip files:
+- ^(.*/)?app\.yaml
+- ^(.*/)?app\.yml
+- ^(.*/)?index\.yaml
+- ^(.*/)?index\.yml
+- ^(.*/)?#.*#
+- ^(.*/)?.*~
+- ^(.*/)?.*\.py[co]
+- ^(.*/)?.*/RCS/.*
+- ^(.*/)?\..*
