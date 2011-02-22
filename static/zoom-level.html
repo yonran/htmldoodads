@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<title>Calculating zoom using Javascript</title>
+<style>
+.d {font-size:1.2em;background:yellow}
+</style>
+<style id=binarysearch></style>
+<h1>Calculating zoom using Javascript</h1>
+
+<p>Reading through the responses to the question:
+&#x201C;<a href="http://stackoverflow.com/questions/1713771/how-to-detect-page-zoom-level-in-all-modern-browsers"
+>How to detect page zoom level in all modern browsers?</a>&#x201D; here is a
+compilation of all the methods I could find.
+
+<div id=dummyElement>Dummy element to test media queries.</div>
+<h2>Units</h2>
+Here&#x2019;s my summary of
+<a href="http://www.quirksmode.org/blog/archives/2010/04/a_pixel_is_not.html">A
+pixel is not a pixel is not a pixel</a> on Quirksmode.
+<ul>
+<li>CSS pixels are the unit of all CSS values and any element&#x2019;s
+<code>clientX</code>, <code>offsetX</code>, etc. When you zoom in, there are
+fewer CSS pixels available so CSS widths shrink.
+
+<li>Device pixels are the physical pixels that the browser draws to.
+
+<li>Screen (system) pixels are the unit of all the properties that refer to the
+screen: <code>screen.width</code>, <code>window.screenX</code>,
+<code>window.outerWidth</code>, <code>event.screenX</code>. Older browsers
+returned these measurements in device pixels, which don&#x2019;t change with
+zoom. Firefox 4 begain reporting these in CSS pixels according to the
+<a href="http://www.w3.org/TR/cssom-view/#css-pixels">spec</a>.
+And then there&#x2019;s WebKit (Nexus One and iPhone) and IE8,
+which take this in a crazy bizarre level, where device vendors report
+whatever they want for <code>screen.width</code>, and then developers have
+to convert screen pixels to device pixels using a ratio stored somewhere.
+So now there are three types of pixel we have to deal with.
+</ul>
+
+<h2>Important dimensions from
+<a href="http://www.quirksmode.org/mobile/viewports.html">A tale of two viewports</a></h2>
+<ul>
+<li>&#x201C;Layout viewport&#x201D; width:
+The width inside the window, not including scrollbars.
+When something is <code>width: 100%</code> within the body, how wide will it be?
+(Formally, the width of block elements within the root block formatting context.)
+  <ul>
+    <li><span class=d id=layoutViewportWidth></span> CSS px <code>jQuery(window).width() == document.documentElement.clientWidth</code>
+  </ul>
+<li>&#x201C;Visual viewport&#x201D; width: when an iPhone zooms in, how big
+is the viewport that can be seen? On mobile browsers, this is different from
+the layout viewport because mobile browsers don&#x2019;t re-flow the page when
+you zoom.
+  <ul>
+    <li><span class=d id=visualViewportWidth></span> CSS px <code>window.innerWidth</code>
+    (returns screen px in Opera)
+  </ul>
+<li>&#x201C;Document&#x201D; width: the width of the document. When the
+document overflows outside the viewport, this should include the off-screen
+parts of the document too.
+  <ul>
+    <li><span class=d id=documentWidth></span> CSS px <code>jQuery(document).width()</code>
+        (takes the max of <code>documentElement</code>&#x2019;s
+        <code>clientWidth</code>, <code>scrollWidth</code>, <code>offsetWidth</code>).
+    <li><span class=d id=documentScreenWidth></span> screen px <code>document.width</code> (Firefox 4 gives CSS px instead)
+  </ul>
+</ul>
+
+<h2>Important ratios:</h2>
+<p>Here are all the suggestions for how to measure the zoom level.
+<ul>
+<li>screen pixels / CSS pixels (&#x201C;zoom level&#x201D;):
+  <ul>
+    <li><span class=d id=zoomLevelIe8></span> (IE 8+) <code>screen.systemXDPI / screen.logicalXDPI</code>
+    <li><span class=d id=zoomLevelIe7></span> (IE 7) <code>var r = document.body.getBoundingClientRect(); return (r.right-r.left)/document.body.offsetWidth</code>
+    <li><span class=d id=zoomLevelDocumentWidth></span> (Webkit, FF&lt;4) <code>document.width / jQuery(document).width()</code>
+    <li><span class=d id=zoomLevelLayoutViewport></span> (Old WebKit?) <code>parseInt(getComputedStyle(document.documentElement,null).width) / document.documentElement.clientWidth</code>
+    <li><span class=d id=zoomLevelOpera></span> (Opera) <code>window.innerWidth / document.documentElement.offsetWidth</code>
+    <li><span class=d id=zoomLevelMousemove></span> (fragile; doesn&#x2019;t work in Opera) change in <code>event.screenX</code> / change in <code>event.clientX</code> (click several times in different places;
+    I&#x2019;m listening to mousedown)
+  </ul>
+<li>device pixels / screen pixels:
+  <ul>
+    <li><span class=d id=devicePixelRatioMedia></span> (FF4 zoom level) binary search on
+        <code>@media (min--moz-device-pixel-ratio)</code>
+    <li><span class=d id=devicepixelratio></span> (WebKit mobile) <code>window.devicePixelRatio</code>.
+    <li><span class=d id=devicepixelratioIe></span> (IE) <code>screen.deviceXDPI / screen.systemXDPI</code>.
+  </ul>
+</ul>
+<button onclick="f();">Recalculate</button>, in case onresize and onscroll
+aren&#x2019;t enough for you.
+<script>
+
+var queryDevicePixelRatio = function(r) {
+  var style = document.getElementById('binarysearch');
+  var dummyElement = document.getElementById('dummyElement');
+  style.sheet.insertRule('@media (min--moz-device-pixel-ratio:' + r + ') {#dummyElement {text-decoration: underline} }', 0);
+  style.sheet.insertRule('@media (-webkit-min-device-pixel-ratio:' + r + ') {#dummyElement {text-decoration: underline} }', 0);
+  var matched = getComputedStyle(dummyElement, null).textDecoration == 'underline';
+  style.sheet.deleteRule(0);
+  style.sheet.deleteRule(0);
+  return matched;
+};
+var searchDevicePixelRatio = function(a, b, maxIter, epsilon) {
+  var mid = (a + b)/2;
+  if (maxIter == 0 || b - a < epsilon) return mid;
+  if (queryDevicePixelRatio(mid)) {
+    return searchDevicePixelRatio(mid, b, maxIter-1, epsilon);
+  } else {
+    return searchDevicePixelRatio(a, mid, maxIter-1, epsilon);
+  }
+};
+
+var f = function() {
+  document.getElementById('layoutViewportWidth').innerHTML = document.documentElement.clientWidth;
+  document.getElementById('visualViewportWidth').innerHTML = window.innerWidth;
+  var documentWidthCss = Math.max(
+      document.documentElement.clientWidth,
+      document.documentElement.scrollWidth,
+      document.documentElement.offsetWidth)
+  document.getElementById('documentWidth').innerHTML = documentWidthCss;
+  document.getElementById('documentScreenWidth').innerHTML = document.width;
+  document.getElementById('zoomLevelIe8').innerHTML = screen.systemXDPI / screen.logicalXDPI;
+  var r = document.body.getBoundingClientRect();
+  document.getElementById('zoomLevelIe7').innerHTML = (r.right-r.left)/document.body.offsetWidth;
+  document.getElementById('zoomLevelDocumentWidth').innerHTML = document.width / documentWidthCss;
+  document.getElementById('zoomLevelLayoutViewport').innerHTML = parseInt(getComputedStyle(document.documentElement,null).width) / document.documentElement.clientWidth;
+  document.getElementById('zoomLevelOpera').innerHTML = window.innerWidth / document.documentElement.offsetWidth;
+  document.getElementById('devicePixelRatioMedia').innerHTML =
+      Math.round(1000*searchDevicePixelRatio(0, 10, 20, .0001))/1000;
+  document.getElementById('devicepixelratio').innerHTML = window.devicePixelRatio;
+  document.getElementById('devicepixelratioIe').innerHTML = screen.deviceXDPI / screen.systemXDPI;
+};
+f();
+onresize = onscroll = f;
+var lastMouseEvents = [];
+onmousedown = function(e) {
+  lastMouseEvents.push({
+      clientX: e.clientX, clientY: e.clientY,
+      screenX: e.screenX, screenY: e.screenY});
+  while (lastMouseEvents.length > 3) lastMouseEvents.shift();
+  var lowClientX = lastMouseEvents[0].clientX, highClientX = lowClientX,
+      lowScreenX = lastMouseEvents[0].screenX, highScreenX = lowScreenX;
+  // TODO: do some kind of smoothing--maybe least squares?
+  for (var i = 1; i < lastMouseEvents.length; ++i) {
+    var e = lastMouseEvents[i];
+    if (e.clientX < lowClientX) {
+      lowClientX = e.clientX;
+      lowScreenX = e.screenX;
+    }
+    if (e.clientX > highClientX) {
+      highClientX = e.clientX;
+      highScreenX = e.screenX;
+    }
+  }
+  document.getElementById('zoomLevelMousemove').innerHTML =
+    (highScreenX - lowScreenX) / (highClientX - lowClientX)
+};
+
+</script>

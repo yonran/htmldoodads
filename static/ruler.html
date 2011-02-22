@@ -32,15 +32,24 @@ kbd{
  * Most things are in CSS pixels. any element's style.width, clientWidth,
  * offsetWidth, etc. are in CSS pixels. Some important dimensions in CSS pixels:
  * * "layout viewport": document.documentElement.clientWidth and -Height.
+ *   The width of the viewport (minus scroll bars).
  *   This is the value that style.width: 100% means (on an element in viewport
- *   element's block formatting context, to use the CSS lingo). On an iPhone,
- *   this is the width of the document when fully zoomed out.
+ *   element's block formatting context)
+ *   On an iPhone, this is the width of the document when fully zoomed out.
  *   On mobile it doesn't change when zoomed; layout is not recalculated.
  *   On desktop it changes to match the size of the visual vieport (except that
  *   it doesn't include the scrollbar).
  * * "visual viewport": window.innerWidth and -Height. It becomes small when
  *   the user zooms in on an iPhone because only a few CSS pixels can fit in
  *   the window.
+ * * "document width": jQuery(document).width()
+ *   (which gets max of clientWidth, scrollWidth, offsetWidth)
+ *   the width of the document, which is equal to the "layout viewport" width
+ *   but if the document overflows, it should include that overflow.
+ *   FF: getComputedStyle(document.documentElement).width
+ *   (webkit erroneously returns width of viewport even if document overflows)
+ *   Webkit, FF<4: document.width (but screen pixels only)
+ * aka: "browser pixels", "logical" pixels (IE)
  *
  * Within the canvas, there's a new coordinate space with
  * canvas.width by canvas.height pixels (which are the same as
@@ -74,6 +83,7 @@ kbd{
  * pixels. The spec has caught up to IE 6 but is unaware of modern browsers'
  * zoom (before, browsers would zoom text only without having device pixels
  * separate from screen pixels).
+ * aka: "system" pixels (IE8+)
  *
  * Finally, there are the "device pixels," which are the physical pixels that
  * the browser draws to. Most of the time this is the same thing as screen
@@ -87,13 +97,33 @@ kbd{
  * [1]: http://www.quirksmode.org/blog/archives/2010/09/combining_meta.html
  *
  * So how do they relate to one another?
- * * canvas pixels / CSS pixels = canvas.width / canvas.clientWidth (or
- *   offsetWidth if there's no border and padding)
- * * CSS pixels / screen pixels: I think the only way to do this is to measure
- *   mousemoves on the document and calculate change in clientX / change
- *   in screenX. If the mouse isn't moving, not sure what we can do.
- * * screen pixels / device pixels: 1, window.devicePixelRatio is defined.
- *
+ * * CSS pixels / canvas pixels = canvas.clientWidth / canvas.width
+ * * screen pixels / CSS pixels: "zoom level" in modern desktop browsers
+ *   IE 8: screen.systemXDPI / screen.logicalXDPI
+ *   IE 7: var body = document.body,r = body.getBoundingClientRect(); return (r.left-r.right)/body.offsetWidth [2], [6]
+ *   Webkit, FF<4: document.width / document.documentElement.clientWidth [5]
+ *       (but if document overflows the viewport, Webkit gives wrong answer)
+ *   Old webkit: getComputedStyle(document.documentElement,null).getPropertyCSSValue('width').getFloatValue(CSSPrimitiveValue.CSS_PX) / document.documentElement.clientWidth
+ *   Opera: document.documentElement.offsetWidth / window.innerWidth [7]
+ *       (off by scrollbar)
+ *       (Qurksmode says it's a bug; innerWidth should be CSS px) [8]
+ *   Other: Flash solution [4]
+ *   Alternately, measure change in screenX / change in clientX
+ *   FF4+: media queries binary search
+ * * device pixels / screen pixels:
+ *   IE 8: screen.deviceXDPI / screen.systemXDPI
+ *   Webkit (Nexus One, iPhone4): window.devicePixelRatio.
+
+ [2]: http://help.dottoro.com/ljgshbne.php
+ [3]: Adjusting Scale for Higher DPI Screens: the equivalent of
+      "a pixel is not a pixel"
+      http://msdn.microsoft.com/en-us/library/ms537625(v=vs.85).aspx
+ [4]: http://blog.sebastian-martens.de/2009/12/how-to-detect-the-browser-zoom-level-change-browser-zoo/
+ [5]: http://stackoverflow.com/questions/1713771/how-to-detect-page-zoom-level-in-all-modern-browsers
+ [6]: http://stackoverflow.com/questions/680596/how-to-get-zoom-level-in-internet-explorer-7-javascript
+ [7]: http://virtuelvis.com/archives/2005/05/opera-measure-zoom
+ [8]: http://www.quirksmode.org/m/widths.html
+
  * See this guide to different kinds of pixels:
  * http://www.quirksmode.org/mobile/viewports.html
  * See this reference for the nitty gritty.
