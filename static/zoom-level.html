@@ -6,6 +6,7 @@
 <style id=binarysearch></style>
 <h1>Calculating zoom using Javascript</h1>
 
+<p>2011-02-22
 <p>Reading through the responses to the question:
 &#x201C;<a href="http://stackoverflow.com/questions/1713771/how-to-detect-page-zoom-level-in-all-modern-browsers"
 >How to detect page zoom level in all modern browsers?</a>&#x201D; here is a
@@ -86,8 +87,8 @@ parts of the document too.
     <li><span class=d id=devicepixelratioIe></span> (IE) <code>screen.deviceXDPI / screen.systemXDPI</code>.
   </ul>
 </ul>
-<button onclick="f();">Recalculate</button>, in case onresize and onscroll
-aren&#x2019;t enough for you.
+<button onclick="f();">Recalculate</button>, in case onresize
+isn&#x2019;t enough for you.
 <script>
 
 var queryDevicePixelRatio = function(r) {
@@ -131,7 +132,7 @@ var f = function() {
   document.getElementById('devicepixelratioIe').innerHTML = screen.deviceXDPI / screen.systemXDPI;
 };
 f();
-onresize = onscroll = f;
+onresize = f;
 var lastMouseEvents = [];
 onmousedown = function(e) {
   lastMouseEvents.push({
