@@ -46,6 +46,7 @@ When something is <code>width: 100%</code> within the body, how wide will it be?
 (Formally, the width of block elements within the root block formatting context.)
   <ul>
     <li><span class=d id=layoutViewportWidth></span> CSS px <code>jQuery(window).width() == document.documentElement.clientWidth</code>
+    <li><span class=d id=layoutViewportWidthIncludingScrollbars></span> CSS px: Slightly different: layout viewport <em>including where the scrollbars would be</em>: insert a <ocde>position:fixed; width:100%</code> element and then measure its width.
   </ul>
 <li>&#x201C;Visual viewport&#x201D; width: when an iPhone zooms in, how big
 is the viewport that can be seen? On mobile browsers, this is different from
@@ -62,8 +63,12 @@ parts of the document too.
     <li><span class=d id=documentWidth></span> CSS px <code>jQuery(document).width()</code>
         (takes the max of <code>documentElement</code>&#x2019;s
         <code>clientWidth</code>, <code>scrollWidth</code>, <code>offsetWidth</code>).
-    <li><span class=d id=documentScreenWidth></span> screen px <code>document.width</code> (Firefox 4 gives CSS px instead)
+    <li><span class=d id=documentScreenWidth></span> screen px <code>document.width</code> (WebKit returns screen px; Firefox simply returns <code>getComputedStyle(document.body,null).width</code> instead)
   </ul>
+<li>scrollbar width: <span class=d id=scrollbarWidth></span> CSS px
+for elements with overflow:scroll. Note that interior scrollbars are scaled
+in Opera but not Gecko/WebKit
+(i.e., the number of CSS px is constant in Opera).
 </ul>
 
 <h2>Important ratios:</h2>
@@ -73,11 +78,14 @@ parts of the document too.
   <ul>
     <li><span class=d id=zoomLevelIe8></span> (IE 8+) <code>screen.systemXDPI / screen.logicalXDPI</code>
     <li><span class=d id=zoomLevelIe7></span> (IE 7) <code>var r = document.body.getBoundingClientRect(); return (r.right-r.left)/document.body.offsetWidth</code>
-    <li><span class=d id=zoomLevelDocumentWidth></span> (Webkit, FF&lt;4) <code>document.width / jQuery(document).width()</code>
+    <li><span class=d id=zoomLevelDocumentWidth></span> (Webkit) <code>document.width / jQuery(document).width()</code>
+    <li><span class=d id=zoomLevelMobile></span> (Webkit mobile) <code>document.documentElement.clientWidth / window.innerWidth</code>
     <li><span class=d id=zoomLevelLayoutViewport></span> (Old WebKit?) <code>parseInt(getComputedStyle(document.documentElement,null).width) / document.documentElement.clientWidth</code>
-    <li><span class=d id=zoomLevelOpera></span> (Opera) <code>window.innerWidth / document.documentElement.offsetWidth</code>
+    <li><span class=d id=zoomLevelOpera></span> (Opera) <code>window.innerWidth</code> / width of a <code>position:fixed; width:100%</code> div.
     <li><span class=d id=zoomLevelMousemove></span> (fragile; doesn&#x2019;t work in Opera) change in <code>event.screenX</code> / change in <code>event.clientX</code> (click several times in different places;
     I&#x2019;m listening to mousedown)
+    <li><span class=d id=ff35ZoomLevel></span> (FF3.5 ONLY, not 3.6)
+      <code>screen.width</code> / MQ screen-width
   </ul>
 <li>device pixels / screen pixels:
   <ul>
@@ -85,34 +93,50 @@ parts of the document too.
         <code>@media (min--moz-device-pixel-ratio)</code>
     <li><span class=d id=devicepixelratio></span> (WebKit mobile) <code>window.devicePixelRatio</code>.
     <li><span class=d id=devicepixelratioIe></span> (IE) <code>screen.deviceXDPI / screen.systemXDPI</code>.
+    <li>FF4+ (TODO): compare 100mozmm to 100mm (http://weblogs.mozillazine.org/roc/archives/2010/08/css_units_chang.html)
   </ul>
 </ul>
 <button onclick="f();">Recalculate</button>, in case onresize
 isn&#x2019;t enough for you.
 <script>
 
-var queryDevicePixelRatio = function(r) {
+var mediaQueryMatches = function(property, r) {
   var style = document.getElementById('binarysearch');
   var dummyElement = document.getElementById('dummyElement');
-  style.sheet.insertRule('@media (min--moz-device-pixel-ratio:' + r + ') {#dummyElement {text-decoration: underline} }', 0);
-  style.sheet.insertRule('@media (-webkit-min-device-pixel-ratio:' + r + ') {#dummyElement {text-decoration: underline} }', 0);
-  var matched = getComputedStyle(dummyElement, null).textDecoration == 'underline';
-  style.sheet.deleteRule(0);
+  style.sheet.insertRule('@media (' + property + ':' + r +
+                         ') {#dummyElement ' +
+                         '{text-decoration: underline} }', 0);
+  var matched = getComputedStyle(dummyElement, null).textDecoration
+      == 'underline';
   style.sheet.deleteRule(0);
   return matched;
 };
-var searchDevicePixelRatio = function(a, b, maxIter, epsilon) {
+var mediaQueryBinarySearch = function(
+    property, unit, a, b, maxIter, epsilon) {
   var mid = (a + b)/2;
   if (maxIter == 0 || b - a < epsilon) return mid;
-  if (queryDevicePixelRatio(mid)) {
-    return searchDevicePixelRatio(mid, b, maxIter-1, epsilon);
+  if (mediaQueryMatches(property, mid + unit)) {
+    return mediaQueryBinarySearch(
+        property, unit, mid, b, maxIter-1, epsilon);
   } else {
-    return searchDevicePixelRatio(a, mid, maxIter-1, epsilon);
+    return mediaQueryBinarySearch(
+        property, unit, a, mid, maxIter-1, epsilon);
+  }
+};
+
+// One function to rule them all. Still in the works.
+var displayPxToCssPxRatio = function() {
+  if (screen.logicalXDPI !== undefined) {
+    // IE 8
+    return screen.deviceXDPI / screen.logicalXDPI;
+  } else if (null) {
+    
   }
 };
 
 var f = function() {
-  document.getElementById('layoutViewportWidth').innerHTML = document.documentElement.clientWidth;
+  document.getElementById('layoutViewportWidth').innerHTML =
+      document.documentElement.clientWidth;
   document.getElementById('visualViewportWidth').innerHTML = window.innerWidth;
   var documentWidthCss = Math.max(
       document.documentElement.clientWidth,
@@ -120,14 +144,49 @@ var f = function() {
       document.documentElement.offsetWidth)
   document.getElementById('documentWidth').innerHTML = documentWidthCss;
   document.getElementById('documentScreenWidth').innerHTML = document.width;
+  var outerDiv = document.createElement('div');
+  outerDiv.style.width = outerDiv.style.height = '500px';  // enough for all the scrollbars
+  var div = outerDiv;
+  for (var i = 0; i < 10; ++i) {
+    var child = document.createElement('div');
+    child.style.overflowY = 'scroll';
+    div.appendChild(child);
+    div = child;
+  }
+  document.body.appendChild(outerDiv);
+  var outerDivWidth = outerDiv.clientWidth;
+  var innerDivWidth = div.clientWidth;
+  var scrollbarWidthCss = (outerDivWidth - innerDivWidth)/10;
+  document.body.removeChild(outerDiv);
+  document.getElementById('scrollbarWidth').innerHTML = scrollbarWidthCss;
+
   document.getElementById('zoomLevelIe8').innerHTML = screen.systemXDPI / screen.logicalXDPI;
   var r = document.body.getBoundingClientRect();
   document.getElementById('zoomLevelIe7').innerHTML = (r.right-r.left)/document.body.offsetWidth;
   document.getElementById('zoomLevelDocumentWidth').innerHTML = document.width / documentWidthCss;
   document.getElementById('zoomLevelLayoutViewport').innerHTML = parseInt(getComputedStyle(document.documentElement,null).width) / document.documentElement.clientWidth;
-  document.getElementById('zoomLevelOpera').innerHTML = window.innerWidth / document.documentElement.offsetWidth;
+  document.getElementById('zoomLevelMobile').innerHTML = document.documentElement.clientWidth / window.innerWidth;
+
+  var fixedDiv = document.createElement('div');
+  fixedDiv.style.position = 'fixed';
+  fixedDiv.style.border = '5px solid blue';
+  fixedDiv.style.width = '100%';
+  fixedDiv.style.height = '100%';
+  fixedDiv.style.top = fixedDiv.style.left = '0';
+  document.body.appendChild(fixedDiv);
+  document.getElementById('layoutViewportWidthIncludingScrollbars').innerHTML =
+    fixedDiv.offsetWidth;
+  document.getElementById('zoomLevelOpera').innerHTML = window.innerWidth / fixedDiv.offsetWidth;
+  document.body.removeChild(fixedDiv);
+  document.getElementById('ff35ZoomLevel').innerHTML =
+      screen.width /
+      mediaQueryBinarySearch('min-device-width', 'px', 0, 6000, 20, .0001);
   document.getElementById('devicePixelRatioMedia').innerHTML =
-      Math.round(1000*searchDevicePixelRatio(0, 10, 20, .0001))/1000;
+      Math.round(
+          1000*
+          mediaQueryBinarySearch('min--moz-device-pixel-ratio',
+                                 '', 0, 10, 20, .0001)) /
+      1000;
   document.getElementById('devicepixelratio').innerHTML = window.devicePixelRatio;
   document.getElementById('devicepixelratioIe').innerHTML = screen.deviceXDPI / screen.systemXDPI;
 };
