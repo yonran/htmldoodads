@@ -4,6 +4,8 @@ runtime: python
 api_version: 1
 
 handlers:
+- url: /ruler.html
+  script: redirector.py
 - url: /
   script: redirector.py
 - url: /
