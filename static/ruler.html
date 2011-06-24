@@ -191,18 +191,19 @@ var clearRuler = function() {
 var totemMarker = null;
 var drawRuler = function() {
   var dpi = options.dpi;
+  c.strokeStyle = 'black';
   c.beginPath();
   c.moveTo(0, 0);
   var rulerLength = Math.sqrt(canvas.width*canvas.width + canvas.height*canvas.height);
   if (options.flipped) c.lineTo(-rulerLength, 0);
   else c.lineTo(rulerLength, 0);
   if (options.drawInches) {
-    var i = 0, x = 0;
+    var i = 0;
     c.textBaseline = options.drawInches === 1 ? 'bottom' : 'top';
     var numTicks = rulerLength / dpi * 16;
     for (var i = 0; i < numTicks; ++i) {
       // 1 tick = 1/16 in = dpi/16 px.
-      x = i * dpi/16;
+      var x = i * dpi/16;
       if (options.flipped) x = -x;
       c.moveTo(x,0);
       var y = i % 16 == 0 ? 50 : i % 8 === 0 ? 30 : i % 4 === 0 ? 20 : i % 2 === 0 ? 15 : 10;
@@ -219,7 +220,7 @@ var drawRuler = function() {
     var numTicks = rulerLength / dpi * 25.4;
     for (var i = 0; i < numTicks; ++i) {
       // 1 tick = 1 mm = 1/25.4 in = dpi/25.4px
-      x = i * dpi/25.4;
+      var x = i * dpi/25.4;
       if (options.flipped) x = -x;
       c.moveTo(x,0);
       var y = i % 10 === 0 ? 30 : i % 5 === 0 ? 20 : 10;
@@ -231,8 +232,8 @@ var drawRuler = function() {
     }
   }
   c.stroke();
+  c.beginPath();
   if (totemMarker) {
-    c.beginPath();
     c.strokeStyle = 'green';
     var marker = totemMarker;
     var edgeX = marker.w * dpi;
@@ -247,7 +248,7 @@ var drawRuler = function() {
       c.lineTo(0, 0);
     }
     c.stroke();
-    c.strokeStyle = 'black';
+    c.beginPath();
   }
 };
 var dpiCalibrated = false;
