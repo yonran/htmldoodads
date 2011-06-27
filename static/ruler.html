@@ -1,5 +1,7 @@
 <!DOCTYPE html>
 <title>Free on-screen ruler on the Web.</title>
+<!--Try to get it to work for IE6-8 users.-->
+<meta http-equiv="X-UA-Compatible" content="chrome=1">
 <meta name=description content="Ruler with centimeters and inches. Configurable for different screens.">
 <style>
 html, body {margin:0}
@@ -171,6 +173,13 @@ var clampDpi = function(dpi) {
   return dpi;
 };
 var canvas = document.getElementById('canvas');
+if (!canvas.getContext) {
+  canvas.style.display = 'none';
+  document.write(
+    '<h1>Sorry, you\u2019re using an obsolete browser. ' +
+    'Come back with Chrome, Firefox, Opera,
+    '<a href="http://www.google.com/chromeframe">Chrome Frame</a>, etc.</h1>');
+}
 var c = canvas.getContext('2d');
 var clearRuler = function() {
   var rulerLength = Math.sqrt(canvas.width*canvas.width + canvas.height*canvas.height);
