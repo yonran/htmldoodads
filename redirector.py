@@ -6,12 +6,8 @@ class RedirectHandler(webapp.RequestHandler):
   ruler_data = open(os.path.join(os.path.dirname(__file__), 'ruler.html')).read()
   def get(self):
     logging.info(self.request.path)
-    if 'www.rulernow.com' != self.request.host or '/ruler.html' != self.request.path:
-      if self.request.scheme == 'https':
-        scheme = 'https'
-      else:
-        scheme = 'http'
-      self.redirect(scheme + "://www.rulernow.com/ruler.html")
+    if '/ruler.html' != self.request.path:
+      self.redirect("http://www.rulernow.com/ruler.html")
     else:
       self.response.headers['Content-type'] = 'text/html'
       self.response.headers['Expires'] = wsgiref.handlers.format_date_time(
