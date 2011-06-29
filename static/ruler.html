@@ -363,6 +363,9 @@ canvas.addEventListener('mousedown', function(e) {
     var r = Math.sqrt(a*a + b*b);
     var theta = Math.atan2(b, a);
     var projection = r * Math.cos(theta - currentTransform.angle);
+    if (options.flipped) {
+      projection = -projection;
+    }
     var newDpi = projection / totemMarker.w;
     newDpi = clampDpi(newDpi);
     options.dpi = newDpi;
