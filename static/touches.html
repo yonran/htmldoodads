@@ -1,19 +1,22 @@
 <!DOCTYPE html>
+
+<!--
+Note: for the document element, 100% means height of viewport.
+We need body to be 100% as tall as html,
+and then the canvas to be 100% as tall as body.
+-->
+<html style="height: 100%">
 <!--Copyright (c) 2011, Yonathan Randolph. This is released under BSD. -->
 <title>Test your touchscreen.</title>
 <meta name = "viewport" content="width=device-width">
 <meta name=description content="Simple webpage to show taps on your touchscreen (iPhone, iPad, or Android).">
 <style>
 html, body, canvas {
+  height: 100%;
+  overflow: hidden;
   margin: 0; padding: 0; border: 0;
 }
 </style>
-
-<!--
-Note: html is automatically the height of viewport.
-We need body to be 100% as tall as html,
-and then the canvas to be 100% as tall as body.
--->
 <body style="height: 100%">
 
 <canvas id=canvas style="width:100%; height:100%"></canvas>
@@ -35,6 +38,7 @@ function getColor(name) {
   if (nextColorIndex >= colors.length) nextColorIndex = 0;
   return color;
 }
+var CROSSHAIR_WIDTH = 4;
 function PointDrawer() {
   this.nameToInfo = {};
   this.rectsToClear = [];
@@ -61,8 +65,8 @@ PointDrawer.prototype = {
     c.lineTo(info.x + 50, info.y);
     c.moveTo(info.x, info.y - 50);
     c.lineTo(info.x, info.y + 50);
-    this.rectsToClear.push(info.x - 51, info.y - 3, 102, 6);
-    this.rectsToClear.push(info.x - 3, info.y - 51, 6, 102);
+    this.rectsToClear.push(info.x - 51, info.y - (CROSSHAIR_WIDTH/2 + 1), 102, CROSSHAIR_WIDTH + 2);
+    this.rectsToClear.push(info.x - (CROSSHAIR_WIDTH/2 + 1), info.y - 51, CROSSHAIR_WIDTH + 2, 102);
     c.stroke();
     c.beginPath();
   },
@@ -74,7 +78,7 @@ PointDrawer.prototype = {
                   this.rectsToClear[i + 3]);
     }
     this.rectsToClear.splice(0, this.rectsToClear.length);
-    c.lineWidth = 4;
+    c.lineWidth = CROSSHAIR_WIDTH;
     for (var name in this.nameToInfo) {
       var info = this.nameToInfo[name];
       this.drawTouchPoint(info);
@@ -84,8 +88,8 @@ PointDrawer.prototype = {
 var drawer = new PointDrawer();
 
 canvas.addEventListener('mousedown', function(e) {
-  document.addEventListener('mouseup', cancel);
-  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', cancel, false);
+  document.addEventListener('mousemove', move, false);
   drawer.move('mouse', e.clientX, e.clientY);
   function move(e) {
     drawer.move('mouse', e.clientX, e.clientY);
@@ -129,20 +133,24 @@ canvas.addEventListener('touchstart', function(e) {
 // Welcome message (also shows up on Google's page preview)
 function welcomeScreen() {
   onresize();
+  c.lineWidth = CROSSHAIR_WIDTH;
+  var fontSize = 64;
   drawer.drawTouchPoint({fillStyle: 'orange', x: canvas.width * 3/5, y: canvas.height / 2 - 84});
-  c.fillStyle = 'lightgray';
-  c.font = 'bold 64px sans-serif'
+  c.fillStyle = 'gray';
+  c.font = 'bold ' + fontSize + 'px sans-serif'
   c.textAlign = 'center';
-  c.fillText('Tap anywhere.',
-             canvas.width / 2, canvas.height / 2, canvas.width);
+  c.textBaseline = 'middle';
+  var text = 'Tap anywhere.'
+  c.fillText(text, canvas.width / 2, canvas.height / 2, canvas.width);
+  var textWidth = c.measureText(text).width,
+      approxTextHeight = fontSize * 2;
+  drawer.rectsToClear.push(
+      (canvas.width - textWidth)/2 - 1,
+      (canvas.height - approxTextHeight)/2 - 1,
+      textWidth + 2,
+      approxTextHeight + 2);
 }
-function clearWelcomeScreen() {
-  canvas.width = canvas.width;
-  document.removeEventListener('touchstart', clearWelcomeScreen, true);
-  document.removeEventListener('mousedown', clearWelcomeScreen, true);
-}
-document.addEventListener('touchstart', clearWelcomeScreen, true);
-document.addEventListener('mousedown', clearWelcomeScreen, true);
-addEventListener('load', welcomeScreen);
+addEventListener('load', welcomeScreen, false);
 </script>
 </body>
+</html>
