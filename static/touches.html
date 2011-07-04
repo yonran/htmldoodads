@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<!--Copyright (c) 2011, Yonathan Randolph. This is released under BSD. -->
+<title>Test your touchscreen.</title>
+<meta name = "viewport" content="width=device-width">
+<meta name=description content="Simple webpage to show taps on your touchscreen (iPhone, iPad, or Android).">
+<style>
+html, body, canvas {
+  margin: 0; padding: 0; border: 0;
+}
+</style>
+
+<!--
+Note: html is automatically the height of viewport.
+We need body to be 100% as tall as html,
+and then the canvas to be 100% as tall as body.
+-->
+<body style="height: 100%">
+
+<canvas id=canvas style="width:100%; height:100%"></canvas>
+<!--<div id=debug style="position:absolute; bottom:0; right: 0"></div>-->
+<script>
+var canvas = document.getElementById('canvas')
+  , c = canvas.getContext('2d');
+
+window.onresize = function() {
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+};
+
+var colors = ['yellow', 'green', 'blue', 'orange', 'purple', 'cyan', 'magenta', 'red'];
+var nextColorIndex = 0;
+function getColor(name) {
+  if ('mouse' === name) return 'black';
+  var color = colors[nextColorIndex++];
+  if (nextColorIndex >= colors.length) nextColorIndex = 0;
+  return color;
+}
+function PointDrawer() {
+  this.nameToInfo = {};
+  this.rectsToClear = [];
+}
+PointDrawer.prototype = {
+  move: function(name, x, y) {
+    var info = this.nameToInfo[name];
+    if (null == info)
+      info = this.nameToInfo[name] = {fillStyle: getColor(name)};
+    info.x = x; info.y = y;
+    this.redraw();
+  },
+  remove: function(name) {
+    delete this.nameToInfo[name];
+    this.redraw();
+  },
+  drawTouchPoint: function(info) {
+    c.fillStyle = c.strokeStyle = info.fillStyle;
+    c.arc(info.x, info.y, 20, 0, 2*Math.PI, true);
+    this.rectsToClear.push(info.x - 21, info.y - 21, 42, 42);
+    c.fill();
+    c.beginPath();
+    c.moveTo(info.x - 50, info.y);
+    c.lineTo(info.x + 50, info.y);
+    c.moveTo(info.x, info.y - 50);
+    c.lineTo(info.x, info.y + 50);
+    this.rectsToClear.push(info.x - 51, info.y - 3, 102, 6);
+    this.rectsToClear.push(info.x - 3, info.y - 51, 6, 102);
+    c.stroke();
+    c.beginPath();
+  },
+  redraw: function() {
+    for (var i = 0; i < this.rectsToClear.length; i += 4) {
+      c.clearRect(this.rectsToClear[i],
+                  this.rectsToClear[i + 1],
+                  this.rectsToClear[i + 2],
+                  this.rectsToClear[i + 3]);
+    }
+    this.rectsToClear.splice(0, this.rectsToClear.length);
+    c.lineWidth = 4;
+    for (var name in this.nameToInfo) {
+      var info = this.nameToInfo[name];
+      this.drawTouchPoint(info);
+    }
+  }
+};
+var drawer = new PointDrawer();
+
+canvas.addEventListener('mousedown', function(e) {
+  document.addEventListener('mouseup', cancel);
+  document.addEventListener('mousemove', move);
+  drawer.move('mouse', e.clientX, e.clientY);
+  function move(e) {
+    drawer.move('mouse', e.clientX, e.clientY);
+  }
+  function cancel() {
+    document.removeEventListener('mouseup', cancel, false);
+    document.removeEventListener('mousemove', move, false);
+    drawer.remove('mouse');
+  }
+}, false);
+
+// The most helpful page I found describing touch events is this:
+// http://www.sitepen.com/blog/2008/07/10/touching-and-gesturing-on-the-iphone/
+document.addEventListener('touchend', function(e) {
+  for (var i = 0; i < e.changedTouches.length; i++) {
+    drawer.remove(e.changedTouches[i].identifier);
+  }
+  e.preventDefault();
+}, false);
+document.addEventListener('touchcancel', function(e) {
+  for (var i = 0; i < e.changedTouches.length; i++) {
+    drawer.remove(e.changedTouches[i].identifier);
+  }
+  e.preventDefault();
+}, false);
+function touchChange(movedTouchEvents) {
+  for (var i = 0; i < movedTouchEvents.length; i++) {
+    var touch = movedTouchEvents[i];
+    drawer.move(touch.identifier, touch.clientX, touch.clientY);
+  }
+}
+document.addEventListener('touchmove', function(e) {
+  touchChange(e.changedTouches);
+  e.preventDefault();
+}, false);
+canvas.addEventListener('touchstart', function(e) {
+  touchChange(e.changedTouches);
+  e.preventDefault();
+}, false);
+
+// Welcome message (also shows up on Google's page preview)
+function welcomeScreen() {
+  onresize();
+  drawer.drawTouchPoint({fillStyle: 'orange', x: canvas.width * 3/5, y: canvas.height / 2 - 84});
+  c.fillStyle = 'lightgray';
+  c.font = 'bold 64px sans-serif'
+  c.textAlign = 'center';
+  c.fillText('Tap anywhere.',
+             canvas.width / 2, canvas.height / 2, canvas.width);
+}
+function clearWelcomeScreen() {
+  canvas.width = canvas.width;
+  document.removeEventListener('touchstart', clearWelcomeScreen, true);
+  document.removeEventListener('mousedown', clearWelcomeScreen, true);
+}
+document.addEventListener('touchstart', clearWelcomeScreen, true);
+document.addEventListener('mousedown', clearWelcomeScreen, true);
+addEventListener('load', welcomeScreen);
+</script>
+</body>
