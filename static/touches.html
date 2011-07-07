@@ -39,9 +39,14 @@ function getColor(name) {
   return color;
 }
 var CROSSHAIR_WIDTH = 4;
-function PointDrawer() {
+function PointDrawer(c, options) {
+  this.c = c;
   this.nameToInfo = {};
   this.rectsToClear = [];
+  this.lastStatimestamp = 0;
+  this.redrawCountSinceLastStat = 0;
+  this.fps = 0;
+  this.shouldDrawFps = null != options && options.shouldDrawFps;
 }
 PointDrawer.prototype = {
   move: function(name, x, y) {
@@ -54,6 +59,7 @@ PointDrawer.prototype = {
     delete this.nameToInfo[name];
   },
   drawTouchPoint: function(info) {
+    var c = this.c;
     c.fillStyle = c.strokeStyle = info.fillStyle;
     c.arc(info.x, info.y, 20, 0, 2*Math.PI, true);
     this.rectsToClear.push(info.x - 21, info.y - 21, 42, 42);
@@ -69,6 +75,7 @@ PointDrawer.prototype = {
     c.beginPath();
   },
   redraw: function() {
+    var c = this.c;
     for (var i = 0; i < this.rectsToClear.length; i += 4) {
       c.clearRect(this.rectsToClear[i],
                   this.rectsToClear[i + 1],
@@ -81,9 +88,57 @@ PointDrawer.prototype = {
       var info = this.nameToInfo[name];
       this.drawTouchPoint(info);
     }
+    if (this.shouldDrawFps) {
+      var now = +new Date;
+      if (now - this.lastStatimestamp > 500) {
+        this.fps = Math.floor((1000 * this.redrawCountSinceLastStat / (now - this.lastStatimestamp))*100)/100;
+        this.lastStatimestamp = now;
+        this.redrawCountSinceLastStat = 0;
+      }
+      c.textAlign = 'left';
+      c.textBaseline =  'top';
+      c.font = '16px sans-serif'
+      c.fillText(this.fps, 0, 0, 100);
+      this.rectsToClear.push(0, 0, 100, 20);
+      this.redrawCountSinceLastStat++;
+    }
   }
 };
-var drawer = new PointDrawer();
+function CachingPointDrawer(c, options) {
+  PointDrawer.call(this, c, options);
+  this.cache = {};
+}
+CachingPointDrawer.prototype = {
+  drawTouchPoint: function(info) {
+    var cached = this.cache[info.fillStyle];
+    if (null == cached) {
+      cached = this.cache[info.fillStyle] = document.createElement('canvas');
+      cached.width = cached.height = 102;
+      var c = cached.getContext('2d');
+      new PointDrawer(c).drawTouchPoint({fillStyle: info.fillStyle, x: 51, y: 51});
+    }
+    this.c.drawImage(cached, info.x - 51, info.y - 51);
+    this.rectsToClear.push(info.x - 51, info.y - 51, 102, 102);
+  },
+};
+CachingPointDrawer.prototype.__proto__ = PointDrawer.prototype;
+var drawer;
+
+// Parse the URL fragment. Current options:
+// fps: show the refresh rate at the top left.
+// c: use the cached drawer (keeps 102x102 canvases for each color).
+var fragIdx = location.href.indexOf('#');
+var frags = (fragIdx >= 0 ? location.href.substr(fragIdx + 1) : '').split('&');
+var options = {};
+if (-1 != frags.indexOf('fps')) {
+  options.shouldDrawFps = true;
+}
+if (-1 != frags.indexOf('c'))
+  drawer = new CachingPointDrawer(c, options);
+else
+  drawer = new PointDrawer(c, options);
+
+
 
 canvas.addEventListener('mousedown', function(e) {
   document.addEventListener('mouseup', cancel, false);
