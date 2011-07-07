@@ -49,11 +49,9 @@ PointDrawer.prototype = {
     if (null == info)
       info = this.nameToInfo[name] = {fillStyle: getColor(name)};
     info.x = x; info.y = y;
-    this.redraw();
   },
   remove: function(name) {
     delete this.nameToInfo[name];
-    this.redraw();
   },
   drawTouchPoint: function(info) {
     c.fillStyle = c.strokeStyle = info.fillStyle;
@@ -91,13 +89,16 @@ canvas.addEventListener('mousedown', function(e) {
   document.addEventListener('mouseup', cancel, false);
   document.addEventListener('mousemove', move, false);
   drawer.move('mouse', e.clientX, e.clientY);
+  drawer.redraw();
   function move(e) {
     drawer.move('mouse', e.clientX, e.clientY);
+    drawer.redraw();
   }
   function cancel() {
     document.removeEventListener('mouseup', cancel, false);
     document.removeEventListener('mousemove', move, false);
     drawer.remove('mouse');
+    drawer.redraw();
   }
 }, false);
 
@@ -107,12 +108,14 @@ document.addEventListener('touchend', function(e) {
   for (var i = 0; i < e.changedTouches.length; i++) {
     drawer.remove(e.changedTouches[i].identifier);
   }
+  drawer.redraw();
   e.preventDefault();
 }, false);
 document.addEventListener('touchcancel', function(e) {
   for (var i = 0; i < e.changedTouches.length; i++) {
     drawer.remove(e.changedTouches[i].identifier);
   }
+  drawer.redraw();
   e.preventDefault();
 }, false);
 function touchChange(movedTouchEvents) {
@@ -120,6 +123,7 @@ function touchChange(movedTouchEvents) {
     var touch = movedTouchEvents[i];
     drawer.move(touch.identifier, touch.clientX, touch.clientY);
   }
+  drawer.redraw();
 }
 document.addEventListener('touchmove', function(e) {
   touchChange(e.changedTouches);
